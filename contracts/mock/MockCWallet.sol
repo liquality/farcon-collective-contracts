@@ -82,13 +82,6 @@ contract NewCWallet is ICWallet, BaseAccount, TokenCallbackHandler, UUPSUpgradea
 
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {
-        if (whitelistedTargets[msg.sender]) {
-            bool success = ICollective(collective).receivePoolReward{value : msg.value}(msg.sender);
-            if (!success) {
-                revert CWallet__FailedToReceiveReward(msg.sender, msg.value);
-            }
-            emit RewardReceived(msg.sender, msg.value);
-        }
     }
 
 

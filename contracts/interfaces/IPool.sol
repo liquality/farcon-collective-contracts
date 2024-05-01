@@ -5,16 +5,16 @@ pragma solidity ^0.8.20;
 interface IPool {
     
     /* EVENTS */
-    event NewMint(address indexed participant, uint256 indexed tokenID, uint256 quantity, uint256 indexed amountPaid);
-    event RewardDistributed(uint256 indexed amountToken, uint256 indexed amountNative);
-    event RewardWithdrawn(address indexed participant, uint256 indexed nativeAmount, uint256 indexed tokenAmount);
+    event NewParticipant(address indexed participant, uint256 indexed tokenID, uint256 quantity, uint256 indexed amountPaid);
     event RewardReceived(address indexed from, uint256 amount);
     event NewParticipant(address indexed participant);
-    event WithdrawnFromPool(address indexed to, address indexed token, uint256 indexed amount);
+    event WithrawnToCollective(address indexed to, address indexed token, uint256 indexed amount);
+    event DrawStarted();
+    event WinnerSelected(address indexed winner);
+    event PrizeSent(address indexed tokenAddress, address indexed winner, uint256 indexed tokenId);
 
     /* ERRORS */
     error Pool__ZeroParticipation(address participant);
-    error Pool__NoRewardToDistribute();
     error Pool__FailedToWithdrawFunds(address _recipient, address token, uint256 _amount);
     
 
@@ -28,16 +28,7 @@ interface IPool {
     /// @param _amountPaid The amount paid for the token minted
     /// @param _tokenID The token ID of the NFT minted
     /// @param _quantity The quantity of NFTs minted
-    function recordMint(address _participant, uint256 _tokenID, uint256 _quantity, uint256 _amountPaid) external;
-
-    /// @notice Distribute reward according to distribution mapping
-    /// @dev This function is called by the collective AA wallet, when a reward is received from the NFT contract
-    function distributeReward(address _tokenContract) external;
-
-    /// @notice Withdraw reward from pool
-    /// @dev This function is called by the participant, to withdraw their reward from the pool
-    /// @param _participants The address of the participants
-    function withdrawReward(address[] calldata _participants, address _tokenContracts) external;
+    function enterDraw(address _participant, uint256 _tokenID, uint256 _quantity, uint256 _amountPaid) external;
 
     /* -----READ ONLY METHODS----- */
 

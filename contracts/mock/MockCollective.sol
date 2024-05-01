@@ -159,7 +159,7 @@ contract NewCollective is ICollective, UUPSUpgradeable, Initializable {
 
     function recordPoolMint(address _pool, address _participant, uint256 _tokenID, uint256 _quantity, uint256 _amountPaid)
     external {
-        Pool(payable(_pool)).recordMint(_participant, _tokenID, _quantity, _amountPaid);
+        Pool(payable(_pool)).enterDraw(_participant, _tokenID, _quantity, _amountPaid);
     }
 
     function renounceOperator() external {

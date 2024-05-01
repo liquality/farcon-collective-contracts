@@ -128,21 +128,7 @@ contract Collective is ICollective, UUPSUpgradeable, Initializable {
         if(msg.sender != cWallet) {
             revert Collective__OnlyCWallet(msg.sender);
         } 
-        Pool(payable(_pool)).recordMint(_participant, _tokenID, _quantity, _amountPaid);
-    }
-
-    function receivePoolReward(address _honeyPot) external payable returns (bool) {
-        if (pools[_honeyPot].id == address(0)) {
-            revert Collective__PoolNotAdded(pools[_honeyPot].id);
-        }
-        address payable poolAddress = payable(pools[_honeyPot].id); 
-        (bool success, ) = poolAddress.call{value: msg.value}("");
-        if (!success) {
-            revert Collective__PoolRewardNotSent(poolAddress, _honeyPot, msg.value);
-        }
-        // Pool(poolAddress).pause();
-        emit RewardForwarded(pools[_honeyPot].id, _honeyPot, msg.value, pools[_honeyPot].tokenContract);
-        return true;
+        Pool(payable(_pool)).enterDraw(_participant, _tokenID, _quantity, _amountPaid);
     }
 
     function whitelistTargets(address[] calldata _targets) external {

@@ -42,11 +42,6 @@ interface ICollective {
     /// @param _honeyPots The address of the honey pot
     function createPools(address[] calldata _tokenContracts, address[] calldata _honeyPots) external ; // Only group admin or whitelisted members
 
-    /// @notice Receive pool reward
-    /// @dev This function is called by the pool, to receive the pool reward
-    /// @param _honeyPot The address of the honey pot sender
-    function receivePoolReward(address _honeyPot) external payable returns (bool);
-
     /// @notice Whitelist target addresses on wallet
     /// @dev This function is called by the collective, to whitelist target addresses on wallet
     /// @param _targets The address of the target

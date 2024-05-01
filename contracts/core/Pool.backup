@@ -2,19 +2,28 @@
 
 pragma solidity ^0.8.20;
 
-import {IPool_Main} from "./IPool_Main.sol";
+import {IPool} from "../interfaces/IPool.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
-contract Pool_Main is IPool_Main, Pausable, ReentrancyGuard  {
+import "@chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
+
+contract Pool is IPool, Pausable, ReentrancyGuard, VRFV2WrapperConsumerBase  {
 
 /* ======================= STORAGE ====================== */
+
+    /* CONSTANTS */
+    uint8 constant private VRF_REQUEST_NO_WORDS = 1;
+    uint8 constant private VRF_REQUEST_N0_CONFIRMATIONS = 3;
+    uint256 private vrfRequestId;
+
     struct Participant {
         address id;
         uint64 contribution;
-        uint256 rewardedAmount;
-        uint256 rewardAvailable;
+        bool isWinner;
     }
     mapping(address => Participant) public participantData;
     
@@ -44,7 +53,8 @@ contract Pool_Main is IPool_Main, Pausable, ReentrancyGuard  {
 /* ======================= EXTERNAL METHODS ====================== */
 
 
-    constructor(address _tokenContract, address _initiator) {
+    constructor(address _tokenContract, address _initiator, address _linkToken, address _vrfWrapper) 
+     VRFV2WrapperConsumerBase(_linkToken, _vrfWrapper) {
         tokenContract = _tokenContract;
         poolInitiator = _initiator;
         collective = msg.sender;
@@ -67,59 +77,57 @@ contract Pool_Main is IPool_Main, Pausable, ReentrancyGuard  {
     }
 
     // @inheritdoc IPool
-    function recordMint(address _participant, uint256 _tokenID, uint256 _quantity, uint256 _amountPaid) 
+    function enterDraw(address _participant, uint256 _tokenID, uint256 _quantity, uint256 _amountPaid) 
     external onlyCollective whenNotPaused {
-        participantData[_participant].contribution += uint64(_quantity);
-        totalContributions += uint128(_quantity);
-
-        if (participantData[_participant].id == address(0)) {
-            participantData[_participant].id = _participant;
-            participants.push(_participant);
-        }
-
-        emit NewMint(_participant, _tokenID, _quantity, _amountPaid);
+        participants.push(_participant);
+        emit NewParticipant(_participant, _tokenID, _quantity, _amountPaid);
     }
 
-    // @inheritdoc IPool
-    function distributeReward() external {
-        if (isDistributed || !isRewardReceived || poolReward == 0) {
-            revert Pool__NoRewardToDistribute();
+    function startDraw(uint32 _callbackGasLimit) external {
+        require(participants.length > 0, "No participants");
+        vrfRequestId = requestRandomness(_callbackGasLimit, VRF_REQUEST_N0_CONFIRMATIONS, VRF_REQUEST_NO_WORDS);
+        emit DrawStarted();
+    }
+
+    function fulfillRandomWords(uint256 _requestId, uint256[] memory _randomWords) internal override {
+        require(vrfRequestId == _requestId && _randomWords.length > 0, "Invalid request");
+        for (uint256 i = 0; i < _randomWords.length; i++) {
+            uint256 winnerIndex = _randomWords[i] % participants.length;
+            participantData[participants[winnerIndex]].isWinner = true;
+            emit WinnerSelected(participants[winnerIndex]);
         }
-        uint256 poolRewardAmount = poolReward;
-        for (uint256 i = 0; i < participants.length;) {
-            Participant memory participant = participantData[participants[i]];
-            participantData[participants[i]].rewardedAmount = 
-                (participant.contribution * poolRewardAmount) / totalContributions;
-            participantData[participants[i]].rewardAvailable = 
-                participantData[participants[i]].rewardedAmount;
-            emit RewardDistributed(participant.id, participant.rewardedAmount);
+    }
+
+    function sendPrize(address[] calldata _tokenAddress, address[] calldata _winner, uint256[] calldata _tokenId, uint8[] calldata _type) external onlyPoolInitiator nonReentrant {
+        require(_tokenAddress.length == _winner.length && _winner.length == _tokenId.length && _tokenId.length == _type.length, "Invalid input");
+        for (uint256 i = 0; i < _tokenAddress.length;) {
+            if (_winner[i] != address(0) && participantData[_winner[i]].isWinner == true) {
+                if (_type[i] == 1) {
+                    IERC721(_tokenAddress[i]).safeTransferFrom(address(this), _winner[i], _tokenId[i]);
+                } else {
+                    IERC1155(_tokenAddress[i]).safeTransferFrom(address(this), _winner[i], _tokenId[i], 1, "");
+                }
+                emit PrizeSent(_tokenAddress[i], _winner[i], _tokenId[i]);
+            }
+
             unchecked {
                 i++;
             }
         }
-        isDistributed = true;
     }
 
-    // @inheritdoc IPool
-    function withdrawReward(address _participant) external nonReentrant {
-        if (participantData[_participant].id == address(0)) {
-            revert Pool__ZeroParticipation(_participant);
-        }
-        uint256 rewardAvailable = participantData[_participant].rewardAvailable;
-        if (rewardAvailable == 0) {
-            return;
-        }
-        participantData[_participant].rewardAvailable = 0;
-        (bool success, ) = payable(_participant).call{value: rewardAvailable}("");
-        if (!success) {
-            participantData[_participant].rewardAvailable = rewardAvailable;
-        }
-        rewardDistributed += rewardAvailable;
-        emit RewardWithdrawn(_participant, rewardAvailable);
+       /**
+     * Allow withdraw of Link tokens from the contract
+     */
+    function withdrawLink(IERC20 _linkToken, address _recipient) public onlyPoolInitiator nonReentrant {
+        require(
+            _linkToken.transfer(_recipient, _linkToken.balanceOf(address(this))),
+            "Unable to transfer remaining LINK to recipient"
+        );
     }
 
     // withdraw all funds from the pool to collective, and destroy the pool
-    function withdrawNative() external onlyCollective {
+    function withdrawNative() external onlyPoolInitiator nonReentrant {
         (bool success, ) = payable(collective).call{value: address(this).balance}("");
         if (!success) {
             revert Pool__FailedToWithdrawFunds(collective, address(0), address(this).balance);
@@ -128,7 +136,7 @@ contract Pool_Main is IPool_Main, Pausable, ReentrancyGuard  {
     }
 
     // withdraw all ERC20 tokens from the pool to collective
-    function withdrawERC20(address _tokenContract) external onlyCollective {
+    function withdrawERC20(address _tokenContract) external onlyPoolInitiator nonReentrant {
         uint256 balance = IERC20(_tokenContract).balanceOf(address(this));
         bool success = IERC20(_tokenContract).transfer(collective, balance);
         if (!success) {

@@ -877,11 +877,6 @@ function getErrorSignature(error: AbiError) {
     const types = error.inputs.map(input => input.type);
     return `${error.name}(${types.join(',')})`;
 }
-// function getFuncSignature(error: AbiParameter) {
-//     const types = error.name.inputs.map(input => input.type);
-//     return `${error.name}(${types.join(',')})`;
-// }
-
 // Function to find the matching error
 function findMatchingError(signature: string) {
   for (let abi in errorAbis) {
@@ -898,22 +893,8 @@ function findMatchingError(signature: string) {
     
   return null;
 }
-// function findMatchingFunc(funcSigs: string) {
-//     for (let func of funcSigs) {
-//         const errorSignature = getFuncSignature(func);
-//         const hashedSignature = ethers.keccak256(ethers.toUtf8Bytes(funcSigs));
-//         const shortSignature = hashedSignature.slice(0, 10); // First 4 bytes
-
-//         if (shortSignature === signature) {
-//             return func;
-//         }
-//     }
-//     return null;
-// }
-
 const signature = '0xd9f55f13';
 const matchingError = findMatchingError(signature);
-// const matchingFunc = findMatchingFunc(signature);
 
 if (matchingError) {
     console.log('Matching Error:', matchingError.name);
